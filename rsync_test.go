@@ -30,8 +30,10 @@ func Test_SyncModifiedContent(t *testing.T) {
 		//计算每个块的哈希值
 		hashes := CalculateBlockHashes(original)
 		opsChannel := make(chan RSyncOp)
+		//计算不同放入通道中
 		go CalculateDifferences(modified, hashes, opsChannel)
 
+		//从通道取数据块
 		result := ApplyOps(original, opsChannel, len(modified))
 
 		fmt.Println(result)

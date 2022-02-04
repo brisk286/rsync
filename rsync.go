@@ -12,14 +12,14 @@ import (
 )
 
 const (
-	//默认块大小
+	// BlockSize 默认块大小
 	//BlockSize = 1024 * 644
 	BlockSize = 2
-	//65536 弱哈希算法取模
+	// M 65536 弱哈希算法取模
 	M = 1 << 16
 )
 
-//hash块结构
+// BlockHash hash块结构
 type BlockHash struct {
 	//哈希块下标
 	index int
@@ -34,22 +34,19 @@ type BlockHash struct {
 // Modified data between two block matches is sent like a DATA operation.
 //常量
 const (
-	//数据传输
+	// BLOCK 整块数据
 	BLOCK = iota
-	//数据修改
+	// DATA 单独修改数据
 	DATA
 )
 
 // RSyncOp An rsync operation (typically to be sent across the network). It can be either a block of raw data or a block index.
 //rsync数据体
 type RSyncOp struct {
-	// Kind of operation: BLOCK | DATA.
-	//操作类型：DATA是不完整的块  BLOCK是完整的块
+	//操作类型
 	opCode int
-	// The raw modificated (or misaligned) data. Iff opCode == DATA, nil otherwise.
 	//如果是DATA 那么保存数据
 	data []byte
-	// The index of found block. Iff opCode == BLOCK. nil otherwise.
 	//如果是BLOCK 保存块下标
 	blockIndex int
 }
@@ -65,9 +62,14 @@ func CalculateBlockHashes(content []byte) []BlockHash {
 		endingByte := min((i+1)*BlockSize, len(content))
 		// 确认每个块的定位
 		block := content[initialByte:endingByte]
+		//计算此块的弱hash
 		weak, _, _ := weakHash(block)
 		//保存到块哈希数组中
-		blockHashes[i] = BlockHash{index: i, strongHash: strongHash(block), weakHash: weak}
+		blockHashes[i] = BlockHash{
+			index:      i,
+			strongHash: strongHash(block),
+			weakHash:   weak,
+		}
 	}
 	return blockHashes
 }
@@ -88,19 +90,18 @@ func getBlocksNumber(content []byte) int {
 //参数：文件内容，数据操作体 通道， 本地文件大小
 //返回:组装后的数据
 func ApplyOps(content []byte, ops chan RSyncOp, fileSize int) []byte {
-	var offset int
 	result := make([]byte, fileSize)
+
 	//遍历通道接收到的数据
+	var offset int
 	for op := range ops {
 		switch op.opCode {
 		case BLOCK:
-			//copy：目的地，源文件
-			//fmt.Println(1, content[op.blockIndex*BlockSize:op.blockIndex*BlockSize+BlockSize])
+			//copy：目标文件，源文件
 			copy(result[offset:offset+BlockSize], content[op.blockIndex*BlockSize:op.blockIndex*BlockSize+BlockSize])
 			offset += BlockSize
 		//DATA是不定长的
 		case DATA:
-			//fmt.Println(2, op.data)
 			copy(result[offset:], op.data)
 			offset += len(op.data)
 		}
@@ -110,6 +111,7 @@ func ApplyOps(content []byte, ops chan RSyncOp, fileSize int) []byte {
 
 // CalculateDifferences Computes all the operations needed to recreate content.
 // All these operations are sent through a channel of RSyncOp.
+//计算不同
 //不返回，将处理的数据放入通道
 //参数：本地文件内容， 传送过来的块哈希数组， 空操作通道
 func CalculateDifferences(content []byte, hashes []BlockHash, opsChannel chan RSyncOp) {
@@ -122,6 +124,7 @@ func CalculateDifferences(content []byte, hashes []BlockHash, opsChannel chan RS
 	for _, h := range hashes {
 		key := h.weakHash
 		//用弱hash做key，值为哈希块
+		//数组+链表！！todo：Test
 		hashesMap[key] = append(hashesMap[key], h)
 	}
 
